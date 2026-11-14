@@ -1,0 +1,6 @@
+{
+  "name": "VeloCalc Pro - 51 Precision Calculators",
+  "description": "Clean, distraction-free suite of 51 precision calculators for finance, fitness, math, and engineering with live schedules, what-if comparison, and zero tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
