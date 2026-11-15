@@ -89,15 +89,49 @@ export default function App() {
     localStorage.setItem('velocalc_theme_color', activeTheme);
   }, [activeTheme]);
 
-  // Hash route listener
+  // Clean pathname, query param & hash route listener (supports /calc/:id, /:page, ?calc=, #calc=)
   useEffect(() => {
-    const handleHash = () => {
+    const validPages: PageId[] = ['calculators', 'compare', 'knowledge', 'history', 'assistant', 'privacy'];
+
+    const syncRouteFromUrl = () => {
+      const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+
+      if (pathname.startsWith('/calc/')) {
+        const calcId = pathname.replace('/calc/', '');
+        if (calculators.some((c) => c.id === calcId)) {
+          setActiveCalcId(calcId);
+          setActivePage('calculators');
+          return;
+        }
+      }
+
+      const pathPage = pathname.replace(/^\//, '') as PageId;
+      if (validPages.includes(pathPage)) {
+        setActivePage(pathPage);
+        return;
+      }
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryPage = searchParams.get('page') as PageId | null;
+      const queryCalc = searchParams.get('calc');
+
+      if (queryCalc && calculators.some((c) => c.id === queryCalc)) {
+        setActiveCalcId(queryCalc);
+        setActivePage('calculators');
+        return;
+      }
+
+      if (queryPage && validPages.includes(queryPage)) {
+        setActivePage(queryPage);
+        return;
+      }
+
       const hash = window.location.hash.replace(/^#/, '');
       if (!hash) return;
 
       if (hash.startsWith('page=')) {
         const page = hash.replace('page=', '') as PageId;
-        if (['calculators', 'compare', 'knowledge', 'history', 'assistant', 'privacy'].includes(page)) {
+        if (validPages.includes(page)) {
           setActivePage(page);
         }
       } else if (hash.startsWith('calc=')) {
@@ -112,21 +146,44 @@ export default function App() {
       }
     };
 
-    window.addEventListener('hashchange', handleHash);
-    handleHash();
-    return () => window.removeEventListener('hashchange', handleHash);
+    window.addEventListener('hashchange', syncRouteFromUrl);
+    window.addEventListener('popstate', syncRouteFromUrl);
+    syncRouteFromUrl();
+    return () => {
+      window.removeEventListener('hashchange', syncRouteFromUrl);
+      window.removeEventListener('popstate', syncRouteFromUrl);
+    };
   }, []);
+
+  // Keep page title updated for SEO and browser tabs
+  useEffect(() => {
+    const active = calculators.find((c) => c.id === activeCalcId);
+    if (activePage === 'calculators' && active) {
+      document.title = `${active.name} - VeloCalc Pro`;
+    } else {
+      const titles: Record<PageId, string> = {
+        calculators: 'VeloCalc Pro - 51 Precision Calculators',
+        compare: 'Compare Studio - VeloCalc Pro',
+        knowledge: 'Formulas & Guides - VeloCalc Pro',
+        history: 'Calculation History - VeloCalc Pro',
+        assistant: 'AI Math Assistant - VeloCalc Pro',
+        privacy: 'Privacy & Methodology - VeloCalc Pro',
+      };
+      document.title = titles[activePage];
+    }
+  }, [activePage, activeCalcId]);
 
   const handleNavigate = (page: PageId) => {
     setActivePage(page);
-    window.location.hash = `page=${page}`;
+    const targetPath = page === 'calculators' ? '/' : `/${page}`;
+    window.history.pushState({}, '', targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectCalc = (calcId: string) => {
     setActiveCalcId(calcId);
     setActivePage('calculators');
-    window.location.hash = `calc=${calcId}`;
+    window.history.pushState({}, '', `/calc/${calcId}`);
   };
 
   const handleTogglePin = (id: string) => {

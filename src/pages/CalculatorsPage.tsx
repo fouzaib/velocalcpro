@@ -60,11 +60,14 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
     return init;
   });
 
-  // Re-sync when active calculator changes
+  // Re-sync when active calculator changes (and apply any shared query params)
   React.useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
     const init: Record<string, number> = {};
     activeCalc.inputs.forEach((inp) => {
-      init[inp.id] = inp.val;
+      const paramVal = searchParams.get(inp.id);
+      const parsed = paramVal !== null ? parseFloat(paramVal) : NaN;
+      init[inp.id] = !isNaN(parsed) ? parsed : inp.val;
     });
     setInputValues(init);
     setShowSchedule(false);
@@ -94,7 +97,7 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
   const handleShare = () => {
     const params = new URLSearchParams();
     Object.entries(inputValues).forEach(([k, v]) => params.set(k, String(v)));
-    const shareUrl = `${window.location.origin}${window.location.pathname}#calc=${activeCalc.id}?${params.toString()}`;
+    const shareUrl = `${window.location.origin}/calc/${activeCalc.id}?${params.toString()}`;
     navigator.clipboard.writeText(shareUrl);
     setShared(true);
     setTimeout(() => setShared(false), 2200);
