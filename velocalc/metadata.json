@@ -1,0 +1,8 @@
+{
+  "name": "VeloCalc",
+  "description": "Clean, distraction-free suite of 51 precision calculators for finance, fitness, math, and engineering with live schedules, comparison studio, and built-in SEO prerendering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
