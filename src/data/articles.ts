@@ -1,110 +1,168 @@
-import { Article } from '../types';
+import type { KnowledgeArticle } from '../types.ts';
 
-export const articles: Article[] = [
+export const articles: KnowledgeArticle[] = [
   {
-    id: 'mortgage-amortization-secret',
-    title: 'The Front-Loaded Interest Trap: How Amortization Works',
+    id: 'mortgage-amortization-math',
+    title: 'How Fixed-Rate Mortgage Amortization Works',
     category: 'Finance',
     readTime: '4 min read',
-    summary: 'Why up to 80% of your initial monthly mortgage payments go directly toward interest rather than principal, and how early principal contributions shift the curve.',
+    summary:
+      'Understand why early mortgage payments go mostly toward interest, how principal paydown accelerates over time, and how extra payments reduce total interest.',
     relatedCalcId: 'mortgage',
     sections: [
       {
-        heading: 'The Compound Annuity Mechanics',
-        body: 'Fixed-rate mortgage payments are calculated using a compound annuity equation that ensures identical monthly installments throughout the entire term. However, the internal distribution between principal and interest is dynamic. Because interest is charged on the remaining balance, the early years are overwhelmingly dominated by finance charges.',
-        formula: 'M = P [ i(1 + i)^n ] / [ (1 + i)^n - 1 ]',
+        heading: 'The Monthly Payment Formula',
+        body: 'Lenders compute fixed monthly principal-and-interest payments using an annuity present-value equation. The periodic interest rate r equals the annual percentage rate divided by 12, and n is the total number of monthly payments.',
+        formula: 'M = P · [ r(1 + r)^n ] / [ (1 + r)^n - 1 ]',
       },
       {
-        heading: 'The Power of Early Principal Payments',
-        body: 'Because interest in month (t) is calculated purely on the remaining principal from month (t-1), any voluntary capital applied to the principal immediately lowers every subsequent interest charge forever. An extra $100 per month on a $400,000 30-year mortgage can shave over 4 years and $45,000 in interest.',
+        heading: 'Why Interest Front-Loads in Early Years',
+        body: 'Each month, interest is charged strictly on the remaining principal balance (Balance × r). Because the balance is highest in year 1, interest consumes the majority of early payments while principal reduction compounds slowly at first and rapidly in the final decade.',
+      },
+      {
+        heading: 'Accelerating Equity',
+        body: 'Making even one extra principal payment per year—or shortening a 30-year note to 15 years—cuts remaining balance early, reducing interest accrual across every subsequent month.',
       },
     ],
   },
   {
-    id: 'compound-interest-rule-of-72',
-    title: 'The Exponential Engine: Compound Growth & The Rule of 72',
+    id: 'compound-interest-and-rule-of-72',
+    title: 'Compound Interest, APY, and the Rule of 72',
     category: 'Finance',
-    readTime: '5 min read',
-    summary: 'How regular dollar-cost averaging compounds into multi-decade wealth, and the mental math heuristic used by bankers to calculate doubling time.',
+    readTime: '3 min read',
+    summary:
+      'Compare nominal APR with effective annual yield (APY) and use the logarithmic Rule of 72 to estimate portfolio doubling times mentally.',
     relatedCalcId: 'compound',
     sections: [
       {
-        heading: 'Understanding Compounding Intervals',
-        body: 'Simple interest only pays on the initial principal. Compound interest pays on both the principal and previously earned interest. Over short horizons (1-3 years), the difference is modest. Over long horizons (10-30 years), the compounding curve turns exponential.',
-        formula: 'A = P(1 + r/n)^(nt)',
+        heading: 'Continuous vs. Discrete Compounding',
+        body: 'When interest compounds n times per year on principal P with periodic contributions PMT, growth accelerates exponentially because earned interest generates its own return in future periods.',
+        formula: 'A = P(1 + r/n)^(nt) + PMT · [ ((1 + r/n)^(nt) - 1) / (r/n) ]',
       },
       {
-        heading: 'The Rule of 72 Heuristic',
-        body: 'To mentally estimate how long an investment takes to double at a constant annual yield, divide 72 by the expected interest percentage. At 8% annual return, capital doubles in approximately 9 years (72 / 8 = 9). At 12%, it doubles in just 6 years.',
-        formula: 'Doubling Years ≈ 72 / Annual Interest Rate',
+        heading: 'Deriving the Rule of 72',
+        body: 'Solving (1 + r)^t = 2 gives t = ln(2) / ln(1 + r). Because ln(2) ≈ 0.693, dividing 72 by the annual percentage rate approximates doubling time accurately between 4% and 15%, while remaining easy to factor mentally.',
+        formula: 'Doubling Years ≈ 72 / Annual Return (%)',
       },
     ],
   },
   {
-    id: 'bmr-vs-tdee-math',
-    title: 'BMR vs. TDEE: The Physiology and Math of Energy Balance',
-    category: 'Health',
+    id: 'mifflin-st-jeor-tdee',
+    title: 'Mifflin-St Jeor BMR & TDEE Energy Modeling',
+    category: 'Fitness',
     readTime: '4 min read',
-    summary: 'Why extreme crash dieting triggers metabolic adaptation and how to calculate your true caloric expenditure using the Mifflin-St Jeor formula.',
-    relatedCalcId: 'calorie',
+    summary:
+      'How clinical dietitians estimate resting basal metabolic expenditure and apply physical activity multipliers to plan sustainable caloric deficits or surpluses.',
+    relatedCalcId: 'tdee',
     sections: [
       {
         heading: 'Basal Metabolic Rate (BMR)',
-        body: 'Your BMR represents the net thermal energy required simply to sustain cellular respiration, blood circulation, and organ function while at complete physical and digestive rest. Clinical studies identify the Mifflin-St Jeor equation as the most accurate non-laboratory method.',
-        formula: 'BMR (Men) = 10W + 6.25H - 5A + 5 | BMR (Women) = 10W + 6.25H - 5A - 161',
+        body: 'Published in 1990, the Mifflin-St Jeor equation remains the clinical standard for estimating resting energy expenditure in healthy adults based on mass, height, age, and biological sex.',
+        formula: 'BMR = 10·kg + 6.25·cm - 5·age + s  (s = +5 male, -161 female)',
       },
       {
-        heading: 'Total Daily Energy Expenditure (TDEE)',
-        body: 'TDEE combines BMR with the thermic effect of food (TEF), non-exercise physical activity (NEAT), and structured exercise. Sustainable fat loss operates best at a measured 15% to 20% deficit below TDEE, preserving lean muscle mass and thyroid function.',
+        heading: 'Activity Multipliers (TDEE)',
+        body: 'Multiplying BMR by an activity factor—ranging from 1.2 (sedentary desk work) to 1.9 (high-volume athletic training)—yields Total Daily Energy Expenditure, the maintenance baseline for weight management.',
       },
     ],
   },
   {
-    id: 'understanding-cidr-subnetting',
-    title: 'Demystifying Subnetting: Understanding IPv4 CIDR Prefixes',
-    category: 'Tech & Math',
-    readTime: '6 min read',
-    summary: 'What /24, /27, or /30 actually mean in systems architecture, and how binary masking isolates network identifiers from host allocations.',
+    id: 'onerm-strength-models',
+    title: 'One-Rep Max (1RM) & Training Load Percentages',
+    category: 'Fitness',
+    readTime: '3 min read',
+    summary:
+      'Estimate maximal single-repetition strength safely from submaximal sets of 2–10 reps using the Epley and Brzycki regression models.',
+    relatedCalcId: 'onerm',
+    sections: [
+      {
+        heading: 'Epley Linear Estimation',
+        body: 'Testing a true 1RM increases neuromuscular fatigue and injury risk. For sets of 2 to 10 repetitions taken close to technical failure, Epley provides a reliable strength projection.',
+        formula: '1RM = Weight × (1 + Reps / 30)',
+      },
+      {
+        heading: 'Programming Working Sets',
+        body: 'Once 1RM is estimated, strength blocks typically target 80%–90% for 3–5 reps, while hypertrophy blocks target 65%–78% for 8–12 reps.',
+      },
+    ],
+  },
+  {
+    id: 'cidr-ipv4-subnetting',
+    title: 'IPv4 CIDR Subnetting & Bitmask Architecture',
+    category: 'Engineering',
+    readTime: '5 min read',
+    summary:
+      'Break down 32-bit IPv4 addresses, CIDR prefix lengths (/8 through /32), wildcard masks, network boundaries, and usable host capacity.',
     relatedCalcId: 'subnet',
     sections: [
       {
-        heading: 'The 32-Bit Address Space',
-        body: 'IPv4 addresses consist of 32 bits arranged in four 8-bit octets. Classless Inter-Domain Routing (CIDR) notation denotes how many leading bits are reserved for the network prefix, leaving the remaining bits for unique host assignments.',
-        formula: 'Usable Hosts = 2^(32 - Prefix) - 2',
+        heading: 'Network vs. Host Bits',
+        body: 'An IPv4 address consists of 32 bits split by the CIDR prefix /p into p network bits and (32 - p) host bits. Standard subnets reserve the all-zeros address for the Network ID and all-ones for Broadcast.',
+        formula: 'Usable Hosts = 2^(32 - p) - 2   (for p ≤ 30)',
       },
       {
-        heading: 'Network & Broadcast Reserves',
-        body: 'In standard subnet blocks, two addresses are always reserved: the all-zeroes host address (Network ID) and the all-ones host address (Directed Broadcast). An exception exists under RFC 3021 for /31 point-to-point links, where both addresses are usable.',
-      },
-    ],
-  },
-  {
-    id: 'onerepmax-mechanics',
-    title: 'Strength Metrics: The Biomechanics of One Rep Max (1RM)',
-    category: 'Health',
-    readTime: '3 min read',
-    summary: 'How multi-rep sets predict absolute muscular output without the injury risk of true maximal testing, comparing Epley and Brzycki curves.',
-    relatedCalcId: 'onerepmax',
-    sections: [
-      {
-        heading: 'The Epley and Brzycki Equations',
-        body: 'Direct 1RM testing carries high central nervous system fatigue and joint strain. Submaximal sets of 3 to 8 repetitions provide highly reliable statistical proxies when plugged into validated biomechanical regression curves.',
-        formula: 'Epley: W * (1 + r/30) | Brzycki: W * (36 / (37 - r))',
+        heading: 'Point-to-Point /31 and Host /32 Routes',
+        body: 'RFC 3021 allows /31 links (2 addresses) on router point-to-point interfaces without broadcast waste, while /32 denotes a single loopback or host route.',
       },
     ],
   },
   {
-    id: 'purchasing-power-inflation',
-    title: 'Purchasing Power Decay: The Invisible Drag of Inflation',
-    category: 'Finance',
+    id: 'ohms-law-and-power-dissipation',
+    title: 'Ohm’s Law, DC Power & Thermal Derating',
+    category: 'Engineering',
     readTime: '3 min read',
-    summary: 'How modest annual inflation rates compound into significant erosion of purchasing power over 10 to 30 year horizons.',
-    relatedCalcId: 'inflation',
+    summary:
+      'Relate voltage, current, resistance, and wattage across linear circuits to size resistors and prevent thermal overload.',
+    relatedCalcId: 'ohmslaw',
     sections: [
       {
-        heading: 'Real vs Nominal Value',
-        body: 'A nominal dollar amount stays fixed, but its real command over physical commodities, healthcare, and housing degrades exponentially. At a historical average of 3.2% annual inflation, purchasing power is halved in approximately 22 years.',
-        formula: 'Real Value = Nominal Amount / (1 + i)^t',
+        heading: 'Fundamental DC Relationships',
+        body: 'Across ohmic conductors, current is directly proportional to applied voltage and inversely proportional to resistance. Power dissipation scales with the square of current.',
+        formula: 'V = I · R   |   P = V · I = I² · R = V² / R',
+      },
+      {
+        heading: 'Safety Margin for Component Selection',
+        body: 'Always select resistors rated for at least 2× the calculated steady-state wattage (P) so ambient temperature rise does not exceed component ratings.',
+      },
+    ],
+  },
+  {
+    id: 'quadratic-discriminant-geometry',
+    title: 'Quadratic Roots, Discriminants & Parabolic Geometry',
+    category: 'Math',
+    readTime: '3 min read',
+    summary:
+      'Interpret the discriminant Δ = b² - 4ac to determine whether a quadratic curve crosses the x-axis twice, touches at a single vertex, or yields complex conjugate roots.',
+    relatedCalcId: 'quadratic',
+    sections: [
+      {
+        heading: 'The Quadratic Formula & Vertex',
+        body: 'For any second-degree polynomial ax² + bx + c = 0 (with a ≠ 0), the axis of symmetry lies at x = -b / (2a), and the roots sit symmetrically around it.',
+        formula: 'x = [ -b ± √(b² - 4ac) ] / (2a)',
+      },
+      {
+        heading: 'Three Regimes of Δ',
+        body: 'When Δ > 0 there are two distinct real roots; when Δ = 0 the vertex lies directly on the x-axis (one repeated real root); when Δ < 0 the roots form a complex conjugate pair.',
+      },
+    ],
+  },
+  {
+    id: 'z-score-normal-distribution',
+    title: 'Standard Deviation, Variance & Z-Score Normalization',
+    category: 'Math',
+    readTime: '4 min read',
+    summary:
+      'Measure statistical dispersion and convert raw observations into dimensionless standard deviations from the population mean.',
+    relatedCalcId: 'statistics',
+    sections: [
+      {
+        heading: 'Z-Score Transformation',
+        body: 'A Z-score expresses how many standard deviations σ an observation x sits above or below the mean μ, enabling fair comparison across different scales.',
+        formula: 'Z = (x - μ) / σ',
+      },
+      {
+        heading: 'Empirical 68-95-99.7 Rule',
+        body: 'In normal distributions, roughly 68.27% of values fall within ±1σ, 95.45% within ±2σ, and 99.73% within ±3σ.',
       },
     ],
   },

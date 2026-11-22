@@ -1,140 +1,185 @@
 import React, { useState } from 'react';
-import { ChatMessage, Calculator } from '../types';
-import { formatNumber } from '../utils/format';
-import { Sparkles, Send, Trash2, ArrowRight } from 'lucide-react';
+import { Send, Loader2, AlertCircle } from 'lucide-react';
+import { calculators } from '../data/calculators.ts';
 
-interface AssistantPageProps {
-  chatLog: ChatMessage[];
-  onSendMessage: (text: string) => void;
-  onClearChat: () => void;
-  activeCalc: Calculator;
-  onOpenCalc: (calcId: string) => void;
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  recommendedCalcId?: string;
 }
 
-export const AssistantPage: React.FC<AssistantPageProps> = ({
-  chatLog,
-  onSendMessage,
-  onClearChat,
-  activeCalc,
-  onOpenCalc,
-}) => {
-  const [inputText, setInputText] = useState('');
+interface AssistantPageProps {
+  onSelectCalc: (calcId: string) => void;
+}
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-    onSendMessage(inputText.trim());
-    setInputText('');
+const STARTER_PROMPTS = [
+  'Explain how a 15-year vs 30-year mortgage impacts total interest on $400,000.',
+  'How do I calculate usable hosts in a /26 IPv4 subnet?',
+  'Derive the Rule of 72 and check when it differs from exact doubling time.',
+  'How do I pick a resistor for a 3.2V blue LED on a 5V USB rail at 15 mA?',
+];
+
+export const AssistantPage: React.FC<AssistantPageProps> = ({ onSelectCalc }) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: 'assistant',
+      content:
+        'Ask any question about financial formulas, nutrition math, engineering equations, or which of the 51 VeloCalc Pro tools fits your problem.',
+    },
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sendMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+
+    setError(null);
+    const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: trimmed }];
+    setMessages(nextMessages);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: trimmed,
+          history: nextMessages.slice(-6).map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Server returned status ${res.status}`);
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: data.reply || 'No response generated.',
+          recommendedCalcId: data.recommendedCalcId,
+        },
+      ]);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to reach the assistant API endpoint.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const quickPrompts = [
-    `How does the ${activeCalc.name} formula work?`,
-    'How do early mortgage payments save interest?',
-    'What is the Rule of 72 for investment doubling?',
-    'Calculate math: 50000 * (1 + 0.07)^15',
-    'How do I calculate calories for steady fat loss?',
-  ];
-
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Mathematical &amp; Algorithmic Intelligence
-          </span>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            Velo AI Guide &amp; Math Solver
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Ask formula explanations, tradeoffs between options, or run quick arbitrary equations.
-          </p>
-        </div>
-
-        <button
-          onClick={onClearChat}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          <span>Clear Chat</span>
-        </button>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Formula &amp; Equation Guide</p>
+        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Velo Math &amp; Formula Assistant
+        </h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Step-by-step equation derivations, parameter explanations, and calculator recommendations powered by Gemini.
+        </p>
       </div>
 
-      {/* Quick Prompts Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-          Suggested:
-        </span>
-        {quickPrompts.map((p, idx) => (
+      {/* Starter Prompts */}
+      <div className="flex flex-wrap gap-2">
+        {STARTER_PROMPTS.map((q) => (
           <button
-            key={idx}
-            onClick={() => onSendMessage(p)}
-            className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium shrink-0 transition"
+            key={q}
+            type="button"
+            disabled={loading}
+            onClick={() => sendMessage(q)}
+            className="text-left text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
           >
-            {p}
+            {q}
           </button>
         ))}
       </div>
 
-      {/* Chat Messages Container */}
-      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 min-h-[420px] max-h-[580px] overflow-y-auto space-y-4">
-        {chatLog.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start items-start gap-3'}`}
-          >
-            {msg.sender === 'assistant' && (
-              <div 
-                className="w-7 h-7 rounded-lg text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                ⚡
-              </div>
-            )}
+      {/* Message Feed */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 min-h-[320px] max-h-[520px] overflow-y-auto">
+        {messages.map((msg, idx) => {
+          const recCalc = msg.recommendedCalcId
+            ? calculators.find((c) => c.id === msg.recommendedCalcId)
+            : null;
+          return (
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed ${
-                msg.sender === 'user'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-tr-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 rounded-tl-xs space-y-2'
-              }`}
+              key={idx}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
             >
-              <div className="whitespace-pre-wrap">{msg.text}</div>
-              {msg.suggestedToolId && (
-                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700 flex justify-end">
-                  <button
-                    onClick={() => onOpenCalc(msg.suggestedToolId!)}
-                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    <span>Launch Calculator</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              <div
+                className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                  msg.role === 'user'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                }`}
+              >
+                {msg.content}
+              </div>
+              {recCalc && (
+                <a
+                  href={`/calc/${recCalc.id}`}
+                  onClick={(e) => {
+                    if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                      e.preventDefault();
+                      onSelectCalc(recCalc.id);
+                    }
+                  }}
+                  className="mt-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  Open {recCalc.name} →
+                </a>
               )}
             </div>
+          );
+        })}
+
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Solving and deriving formula...</span>
           </div>
-        ))}
+        )}
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      {error && (
+        <div className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 p-3 flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Composer */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          sendMessage(input);
+        }}
+        className="flex gap-2"
+      >
         <input
           type="text"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Ask a mathematical formula, financial scenario, or type an equation (e.g. 1000 * (1+0.05)^10)..."
-          className="flex-1 px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask a math, finance, fitness, or engineering question..."
+          aria-label="Ask a formula question"
+          className="flex-1 h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
           type="submit"
-          className="px-5 py-3 rounded-2xl text-white font-bold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-xs shrink-0"
-          style={{ backgroundColor: 'var(--accent)' }}
+          disabled={loading || !input.trim()}
+          className="h-11 px-5 inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
         >
           <Send className="w-4 h-4" />
           <span>Ask</span>
         </button>
       </form>
-
     </div>
   );
 };

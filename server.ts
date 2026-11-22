@@ -1,82 +1,126 @@
+import 'dotenv/config';
 import express from 'express';
-import type { Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { calculatorIds, pageRoutes } from './src/data/calculatorIds.ts';
+import { GoogleGenAI, Type } from '@google/genai';
+import { calculators } from './src/data/calculators.ts';
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT || 3000);
+const SITE_URL = (process.env.SITE_URL || process.env.APP_URL || 'https://velocalc.dpdns.org').replace(/\/+$/, '');
 const isProd = process.env.NODE_ENV === 'production';
-
-function getRequestOrigin(req: Request): string {
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const proto = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : (forwardedProto || req.protocol || 'https').split(',')[0].trim();
-
-  const forwardedHost = req.headers['x-forwarded-host'];
-  const host = Array.isArray(forwardedHost)
-    ? forwardedHost[0]
-    : (forwardedHost || req.headers.host || `localhost:${PORT}`).split(',')[0].trim();
-
-  return `${proto}://${host}`;
-}
-
-function buildSitemapXml(origin: string): string {
-  const today = new Date().toISOString().split('T')[0];
-
-  const pageEntries = pageRoutes
-    .map(
-      (r) => `  <url>
-    <loc>${origin}${r.path}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>${r.changefreq}</changefreq>
-    <priority>${r.priority}</priority>
-  </url>`
-    )
-    .join('\n');
-
-  const calcEntries = calculatorIds
-    .map(
-      (id) => `  <url>
-    <loc>${origin}/calc/${id}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>`
-    )
-    .join('\n');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${pageEntries}
-${calcEntries}
-</urlset>
-`;
-}
 
 async function startServer() {
   const app = express();
-  app.set('trust proxy', true);
+  app.use(express.json({ limit: '1mb' }));
 
-  // Dynamic XML Sitemap matched to the requesting domain/protocol
-  app.get('/sitemap.xml', (req: Request, res: Response) => {
-    const origin = getRequestOrigin(req);
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.send(buildSitemapXml(origin));
+  // Server-side Gemini Assistant endpoint
+  app.post('/api/assistant', async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is not configured in server environment secrets.',
+      });
+      return;
+    }
+
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required.' });
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      const calcCatalog = calculators.map((c) => `${c.id}: ${c.name} (${c.category})`).join('\n');
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          systemInstruction: `You are Velo Math & Formula Assistant for VeloCalc Pro.
+Provide clear, concise, accurate mathematical explanations, worked examples, and step-by-step derivations.
+If one of the available calculators below directly solves the user's task, include its exact id in recommendedCalcId; otherwise leave recommendedCalcId empty.
+
+Available calculators:
+${calcCatalog}`,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: {
+                type: Type.STRING,
+                description: 'Clear step-by-step explanation and answer in plain text.',
+              },
+              recommendedCalcId: {
+                type: Type.STRING,
+                description: 'Exact calculator id from the catalog if relevant, or empty string.',
+              },
+            },
+            required: ['reply'],
+          },
+        },
+      });
+
+      const raw = (response.text ?? '{}').trim();
+      const parsed = JSON.parse(raw) as { reply?: string; recommendedCalcId?: string };
+      const validId = calculators.some((c) => c.id === parsed.recommendedCalcId)
+        ? parsed.recommendedCalcId
+        : undefined;
+
+      res.json({
+        reply: parsed.reply || 'Unable to generate a response.',
+        recommendedCalcId: validId,
+      });
+    } catch (err) {
+      console.error('Assistant API error:', err);
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Failed to reach Gemini API.',
+      });
+    }
   });
 
-  // Dynamic robots.txt pointing to the requesting domain's sitemap
-  app.get('/robots.txt', (req: Request, res: Response) => {
-    const origin = getRequestOrigin(req);
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`);
+  // Dynamic sitemap.xml for Node server mode
+  app.get('/sitemap.xml', (_req, res) => {
+    const today = new Date().toISOString().split('T')[0];
+    const urls = [
+      { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
+      { loc: `${SITE_URL}/compare`, priority: '0.9', changefreq: 'weekly' },
+      { loc: `${SITE_URL}/knowledge`, priority: '0.8', changefreq: 'weekly' },
+      { loc: `${SITE_URL}/privacy`, priority: '0.5', changefreq: 'monthly' },
+      ...calculators.map((c) => ({
+        loc: `${SITE_URL}/calc/${c.id}`,
+        priority: '0.8',
+        changefreq: 'monthly',
+      })),
+    ];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls
+  .map(
+    (u) => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`
+  )
+  .join('\n')}
+</urlset>`;
+
+    res.type('application/xml').send(xml);
   });
 
-  // Google AdSense Authorized Digital Sellers
-  app.get('/ads.txt', (_req: Request, res: Response) => {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send('google.com, pub-2288243349631995, DIRECT, f08c47fec0942fa0\n');
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(`User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
   });
 
   if (!isProd) {
@@ -87,20 +131,26 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(import.meta.dirname ?? '.', 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      const indexFile = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexFile)) {
-        res.sendFile(indexFile);
-      } else {
-        res.status(404).send('Not found');
+    const distDir = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distDir, { extensions: ['html'] }));
+    app.get('*', (req, res) => {
+      const cleanPath = req.path.replace(/\/+$/, '');
+      const candidate = path.join(distDir, `${cleanPath === '' ? 'index' : cleanPath}.html`);
+      if (fs.existsSync(candidate)) {
+        res.sendFile(candidate);
+        return;
       }
+      const notFound = path.join(distDir, '404.html');
+      if (fs.existsSync(notFound)) {
+        res.status(404).sendFile(notFound);
+        return;
+      }
+      res.sendFile(path.join(distDir, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`VeloCalc Pro server listening on http://0.0.0.0:${PORT}`);
   });
 }
 

@@ -4,156 +4,28 @@
 @layer base {
   :root {
     --accent: #4f46e5;
-    --accent-hover: #4338ca;
-    --accent-light: rgba(79, 70, 229, 0.12);
-    --accent-border: rgba(79, 70, 229, 0.35);
-    --accent-glow: rgba(79, 70, 229, 0.25);
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  .dark {
+    --accent: #6366f1;
   }
 
   body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body);
   }
 
-  code, kbd, samp, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
   }
 
-  input[type=number]::-webkit-inner-spin-button, 
-  input[type=number]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
   }
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
-}
-
-/* ================= PRINT RESULT STYLESHEET ================= */
-@media print {
-  @page {
-    margin: 12mm 15mm;
-    size: auto;
-  }
-
-  /* Reset layout constraints and enforce crisp paper colors */
-  *, *::before, *::after {
-    box-shadow: none !important;
-    text-shadow: none !important;
-    transition: none !important;
-    animation: none !important;
-  }
-
-  html, body {
-    background-color: #ffffff !important;
-    background-image: none !important;
-    color: #0f172a !important;
-    font-size: 11pt !important;
-    line-height: 1.5 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* Hide navigation, mobile drawers, search bars, directory lists, footers & action buttons */
-  header,
-  nav,
-  footer,
-  aside,
-  .no-print,
-  button,
-  .cmd-palette,
-  #directory-section,
-  ins.adsbygoogle {
-    display: none !important;
-  }
-
-  /* Container bounds adjustments */
-  main {
-    max-width: 100% !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  /* Print Result Main Sheet */
-  .print-calculator-card {
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 12px !important;
-    background: #ffffff !important;
-    padding: 24px !important;
-    margin: 0 !important;
-    width: 100% !important;
-    page-break-inside: avoid;
-  }
-
-  /* Force side-by-side grid in print for Inputs and Outputs */
-  .print-layout-grid {
-    display: grid !important;
-    grid-template-columns: 1.15fr 1fr !important;
-    gap: 28px !important;
-  }
-
-  /* Clean up input representation for print */
-  .print-input-row {
-    border-bottom: 1px solid #e2e8f0 !important;
-    padding-bottom: 6px !important;
-    margin-bottom: 6px !important;
-    page-break-inside: avoid;
-  }
-
-  /* Highlighted Result Card in Print */
-  .print-result-box {
-    border: 2px solid #0f172a !important;
-    background-color: #f8fafc !important;
-    border-radius: 10px !important;
-    padding: 20px !important;
-    page-break-inside: avoid;
-  }
-
-  .print-primary-value {
-    color: #0f172a !important;
-    font-size: 26pt !important;
-    font-weight: 800 !important;
-    line-height: 1.1 !important;
-    margin: 8px 0 16px 0 !important;
-  }
-
-  /* Schedule Table in Print */
-  .print-table-wrapper {
-    max-height: none !important;
-    overflow: visible !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 8px !important;
-    margin-top: 16px !important;
-    page-break-before: auto;
-  }
-
-  table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-  }
-
-  tr {
-    page-break-inside: avoid;
-  }
-
-  th, td {
-    padding: 8px 12px !important;
-    border-bottom: 1px solid #e2e8f0 !important;
-    font-size: 10pt !important;
-    color: #0f172a !important;
-  }
-
-  th {
-    background-color: #f1f5f9 !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    font-size: 8.5pt !important;
-  }
-
-  /* Print-only elements visibility */
-  .print-only {
-    display: block !important;
-  }
 }

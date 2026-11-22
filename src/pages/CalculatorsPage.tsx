@@ -1,601 +1,723 @@
-import React, { useState, useMemo } from 'react';
-import { Calculator, CalculatorCategory, CurrencyKey, HistoryRecord } from '../types';
-import { VisualChart } from '../components/VisualChart';
-import { sanitizeCsvField } from '../utils/format';
-import { 
-  Star, 
-  Copy, 
-  Check, 
-  Share2, 
-  Download, 
-  Printer, 
-  Table, 
-  Search, 
-  BookmarkCheck,
-  ArrowUpRight,
-  Sparkles
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Bookmark, Check, RotateCcw, Search, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { calculators } from '../data/calculators.ts';
+import { articles } from '../data/articles.ts';
+import type { CalcCategory, CurrencyCode, PageId } from '../types.ts';
 
 interface CalculatorsPageProps {
-  calculators: Calculator[];
   activeCalcId: string;
-  onSelectCalc: (id: string) => void;
-  currency: CurrencyKey;
-  pinnedIds: string[];
-  onTogglePin: (id: string) => void;
-  onSaveHistory: (record: HistoryRecord) => void;
-  onAskAi: (calc: Calculator, res: string) => void;
-  accentColor: string;
+  onSelectCalc: (calcId: string) => void;
+  onNavigate: (page: PageId) => void;
+  currency: CurrencyCode;
+  restoredInputs?: Record<string, number> | null;
+  onClearRestoredInputs?: () => void;
+  onSaveSnapshot: (
+    calcId: string,
+    calcName: string,
+    category: CalcCategory,
+    primaryResult: string,
+    primaryLabel: string,
+    inputSnapshot: Record<string, number>
+  ) => void;
 }
 
+const CATEGORIES: ('All' | CalcCategory)[] = ['All', 'Finance', 'Fitness', 'Math', 'Engineering'];
+
 export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
-  calculators,
   activeCalcId,
   onSelectCalc,
+  onNavigate,
   currency,
-  pinnedIds,
-  onTogglePin,
-  onSaveHistory,
-  onAskAi,
-  accentColor,
+  restoredInputs,
+  onClearRestoredInputs,
+  onSaveSnapshot,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<CalculatorCategory>('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [shared, setShared] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(false);
+  const activeCalc = useMemo(
+    () => calculators.find((c) => c.id === activeCalcId) ?? calculators[0],
+    [activeCalcId]
+  );
 
-  // Active calculator
-  const activeCalc = useMemo(() => {
-    return calculators.find((c) => c.id === activeCalcId) || calculators[0];
-  }, [calculators, activeCalcId]);
-
-  // Current inputs state for active calc
-  const [inputValues, setInputValues] = useState<Record<string, number>>(() => {
+  const [values, setValues] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
-    activeCalc.inputs.forEach((inp) => {
+    for (const inp of activeCalc.inputs) {
       init[inp.id] = inp.val;
-    });
+    }
     return init;
   });
 
-  // Re-sync when active calculator changes (and apply any shared query params)
-  React.useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const init: Record<string, number> = {};
-    activeCalc.inputs.forEach((inp) => {
-      const paramVal = searchParams.get(inp.id);
-      const parsed = paramVal !== null ? parseFloat(paramVal) : NaN;
-      init[inp.id] = !isNaN(parsed) ? parsed : inp.val;
-    });
-    setInputValues(init);
-    setShowSchedule(false);
-  }, [activeCalc]);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const inp of activeCalc.inputs) {
+      init[inp.id] = String(inp.val);
+    }
+    return init;
+  });
 
-  const handleInputChange = (id: string, val: number) => {
-    setInputValues((prev) => ({
-      ...prev,
-      [id]: isNaN(val) ? 0 : val,
-    }));
-  };
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<'All' | CalcCategory>('All');
+  const [savedNotice, setSavedNotice] = useState(false);
+  const [showFullSchedule, setShowFullSchedule] = useState(false);
 
-  // Compute live result
-  const result = useMemo(() => {
-    return activeCalc.calc(inputValues, currency);
-  }, [activeCalc, inputValues, currency]);
-
-  // Copy result
-  const handleCopyResult = () => {
-    const text = `${activeCalc.name}: ${result.primary}`;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Share calculation URL
-  const handleShare = () => {
-    const params = new URLSearchParams();
-    Object.entries(inputValues).forEach(([k, v]) => params.set(k, String(v)));
-    const shareUrl = `${window.location.origin}/calc/${activeCalc.id}?${params.toString()}`;
-    navigator.clipboard.writeText(shareUrl);
-    setShared(true);
-    setTimeout(() => setShared(false), 2200);
-  };
-
-  // Save to history
-  const handleSave = () => {
-    const record: HistoryRecord = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      calcId: activeCalc.id,
-      calcName: activeCalc.name,
-      category: activeCalc.category,
-      primaryResult: result.primary,
-      timestamp: Date.now(),
-      inputSnapshot: { ...inputValues },
-    };
-    onSaveHistory(record);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  // Export CSV
-  const handleExportCsv = () => {
-    const rows: string[][] = [
-      [sanitizeCsvField('VeloCalc Pro - Calculation Export')],
-      [sanitizeCsvField('Calculator'), sanitizeCsvField(activeCalc.name)],
-      [sanitizeCsvField('Category'), sanitizeCsvField(activeCalc.category)],
-      [sanitizeCsvField('Currency'), sanitizeCsvField(currency)],
-      [sanitizeCsvField('Date'), sanitizeCsvField(new Date().toLocaleString())],
-      [],
-      [sanitizeCsvField('Input Parameter'), sanitizeCsvField('Value')],
-    ];
-
-    activeCalc.inputs.forEach((inp) => {
-      rows.push([sanitizeCsvField(inp.label), sanitizeCsvField(inputValues[inp.id] ?? inp.val)]);
-    });
-
-    rows.push([]);
-    rows.push([sanitizeCsvField('Primary Result'), sanitizeCsvField(result.primary)]);
-
-    if (result.details && result.details.length > 0) {
-      rows.push([]);
-      rows.push([sanitizeCsvField('Detailed Metrics'), sanitizeCsvField('Value')]);
-      result.details.forEach((d) => {
-        rows.push([sanitizeCsvField(d.label), sanitizeCsvField(d.val)]);
-      });
+  // Sync inputs when switching calculator or restoring a saved snapshot
+  useEffect(() => {
+    const defaults: Record<string, number> = {};
+    for (const inp of activeCalc.inputs) {
+      defaults[inp.id] = inp.val;
     }
 
-    if (result.schedule && result.schedule.length > 0) {
-      rows.push([]);
-      rows.push([
-        sanitizeCsvField('Year'),
-        sanitizeCsvField('Principal Repaid'),
-        sanitizeCsvField('Interest Repaid'),
-        sanitizeCsvField('Remaining Balance'),
-      ]);
-      result.schedule.forEach((s) => {
-        rows.push([
-          sanitizeCsvField(s.year),
-          sanitizeCsvField(s.principalPaid),
-          sanitizeCsvField(s.interestPaid),
-          sanitizeCsvField(s.balanceRemaining),
-        ]);
-      });
+    if (restoredInputs) {
+      for (const inp of activeCalc.inputs) {
+        if (typeof restoredInputs[inp.id] === 'number' && Number.isFinite(restoredInputs[inp.id])) {
+          defaults[inp.id] = restoredInputs[inp.id];
+        }
+      }
+      onClearRestoredInputs?.();
+    } else if (typeof window !== 'undefined' && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      for (const inp of activeCalc.inputs) {
+        const raw = params.get(inp.id);
+        if (raw !== null && raw !== '' && !Number.isNaN(Number(raw))) {
+          defaults[inp.id] = Number(raw);
+        }
+      }
     }
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((r) => r.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `VeloCalc_${activeCalc.id}_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    const drafts: Record<string, string> = {};
+    for (const [k, v] of Object.entries(defaults)) {
+      drafts[k] = String(v);
+    }
 
-  // Filtered calculators for directory
-  const filteredCalculators = useMemo(() => {
+    setValues(defaults);
+    setDraftValues(drafts);
+    setShowFullSchedule(false);
+  }, [activeCalc, restoredInputs, onClearRestoredInputs]);
+
+  const result = useMemo(() => activeCalc.calc(values, currency), [activeCalc, values, currency]);
+
+  const relatedCalcs = useMemo(
+    () => calculators.filter((c) => c.category === activeCalc.category && c.id !== activeCalc.id).slice(0, 6),
+    [activeCalc]
+  );
+
+  const relatedArticle = useMemo(
+    () => articles.find((a) => a.relatedCalcId === activeCalc.id) ?? null,
+    [activeCalc.id]
+  );
+
+  const filteredDirectory = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return calculators.filter((c) => {
       const matchCat = selectedCategory === 'All' || c.category === selectedCategory;
       const matchQuery =
-        !searchQuery ||
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.desc.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.desc.toLowerCase().includes(q) ||
+        c.category.toLowerCase().includes(q);
       return matchCat && matchQuery;
     });
-  }, [calculators, selectedCategory, searchQuery]);
+  }, [searchQuery, selectedCategory]);
 
-  const categories: CalculatorCategory[] = [
-    'All',
-    'Financial',
-    'Fitness & Health',
-    'Math',
-    'Tech & Engineering',
-  ];
+  const handleInputChange = (id: string, val: number) => {
+    setValues((prev) => ({ ...prev, [id]: val }));
+    setDraftValues((prev) => ({ ...prev, [id]: String(val) }));
+  };
 
-  const isPinned = pinnedIds.includes(activeCalc.id);
+  const handleTextInputChange = (id: string, raw: string) => {
+    if (raw !== '' && !/^-?\d*\.?\d*$/.test(raw)) return;
+    setDraftValues((prev) => ({ ...prev, [id]: raw }));
+    if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
+      setValues((prev) => ({ ...prev, [id]: 0 }));
+      return;
+    }
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      setValues((prev) => ({ ...prev, [id]: parsed }));
+    }
+  };
+
+  const handleReset = () => {
+    const defaults: Record<string, number> = {};
+    const drafts: Record<string, string> = {};
+    for (const inp of activeCalc.inputs) {
+      defaults[inp.id] = inp.val;
+      drafts[inp.id] = String(inp.val);
+    }
+    setValues(defaults);
+    setDraftValues(drafts);
+  };
+
+  const handleSave = () => {
+    onSaveSnapshot(
+      activeCalc.id,
+      activeCalc.name,
+      activeCalc.category,
+      result.primary,
+      result.primaryLabel,
+      { ...values }
+    );
+    setSavedNotice(true);
+    window.setTimeout(() => setSavedNotice(false), 1800);
+  };
+
+  const breakdownTotal = result.breakdown?.reduce((sum, b) => sum + Math.max(0, b.value), 0) ?? 0;
+
+  const selectionCalcs = useMemo(
+    () =>
+      selectedCategory === 'All'
+        ? calculators
+        : calculators.filter((c) => c.category === selectedCategory),
+    [selectedCategory]
+  );
+
+  const quickStripCalcs = useMemo(
+    () =>
+      selectedCategory === 'All'
+        ? calculators.filter((c) => c.category === activeCalc.category)
+        : selectionCalcs,
+    [selectedCategory, activeCalc.category, selectionCalcs]
+  );
+
+  const activeIdx = calculators.findIndex((c) => c.id === activeCalc.id);
+  const prevCalc = calculators[(activeIdx - 1 + calculators.length) % calculators.length];
+  const nextCalc = calculators[(activeIdx + 1) % calculators.length];
 
   return (
-    <div className="space-y-12">
-      
-      {/* Pinned Favorites Quick Access (if any) */}
-      {pinnedIds.length > 0 && (
-        <div className="no-print flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-          <span className="font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[11px] shrink-0">
-            ★ Pinned:
-          </span>
-          {pinnedIds.map((id) => {
-            const calc = calculators.find((c) => c.id === id);
-            if (!calc) return null;
-            const isCur = calc.id === activeCalc.id;
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-10">
+      {/* Top Calculator Selection Bar */}
+      <section
+        aria-label="Calculator selection bar"
+        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 sm:p-4 space-y-3"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Category Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {CATEGORIES.map((cat) => {
+              const count =
+                cat === 'All'
+                  ? calculators.length
+                  : calculators.filter((c) => c.category === cat).length;
+              const isSelected = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    if (cat !== 'All' && activeCalc.category !== cat) {
+                      const firstInCat = calculators.find((c) => c.category === cat);
+                      if (firstInCat) onSelectCalc(firstInCat.id);
+                    }
+                  }}
+                  className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {cat} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Direct Selector + Prev / Next */}
+          <div className="flex items-center gap-2 shrink-0">
+            <label htmlFor="quick-calc-select" className="sr-only">
+              Select calculator
+            </label>
+            <select
+              id="quick-calc-select"
+              value={activeCalc.id}
+              onChange={(e) => onSelectCalc(e.target.value)}
+              className="h-9 flex-1 sm:w-72 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {selectedCategory === 'All'
+                ? (['Finance', 'Fitness', 'Math', 'Engineering'] as CalcCategory[]).map((cat) => (
+                    <optgroup key={cat} label={cat}>
+                      {calculators
+                        .filter((c) => c.category === cat)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))
+                : selectionCalcs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+            </select>
+
+            <a
+              href={`/calc/${prevCalc.id}`}
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  onSelectCalc(prevCalc.id);
+                }
+              }}
+              aria-label={`Previous calculator: ${prevCalc.name}`}
+              title={prevCalc.name}
+              className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </a>
+            <a
+              href={`/calc/${nextCalc.id}`}
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  onSelectCalc(nextCalc.id);
+                }
+              }}
+              aria-label={`Next calculator: ${nextCalc.name}`}
+              title={nextCalc.name}
+              className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+
+        {/* Horizontal Quick-Switch Strip */}
+        <div className="border-t border-slate-100 dark:border-slate-800 pt-2.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          {quickStripCalcs.map((calc) => {
+            const isCurrent = calc.id === activeCalc.id;
             return (
-              <button
-                key={id}
-                onClick={() => onSelectCalc(id)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold shrink-0 transition ${
-                  isCur
-                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+              <a
+                key={calc.id}
+                href={`/calc/${calc.id}`}
+                onClick={(e) => {
+                  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                    e.preventDefault();
+                    onSelectCalc(calc.id);
+                  }
+                }}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+                  isCurrent
+                    ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {calc.name}
-              </button>
+              </a>
             );
           })}
         </div>
-      )}
+      </section>
 
-      {/* Hero Active Calculator Studio */}
-      <section className="print-calculator-card bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
-        
-        {/* Printable Official Header */}
-        <div className="hidden print:block px-6 pt-6 pb-4 border-b border-slate-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-extrabold text-slate-900 tracking-tight">VeloCalc Pro</span>
-                <span className="text-xs font-mono px-2 py-0.5 bg-slate-100 rounded text-slate-700">Official Calculation Summary</span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Verified Client-Side Mathematical Modeling</p>
+      {/* Active Calculator Workspace */}
+      <section aria-labelledby="calc-heading" className="space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+          <div className="space-y-2 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <span>{activeCalc.category}</span>
+              <span aria-hidden="true">·</span>
+              <code className="font-mono text-slate-700 dark:text-slate-300">{activeCalc.formulaExplanation}</code>
             </div>
-            <div className="text-right text-xs text-slate-600 font-mono space-y-0.5">
-              <div>Printed: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-              <div>Currency Standard: {currency}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Studio Top Control Bar */}
-        <div className="px-6 py-4 bg-slate-50/60 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => onTogglePin(activeCalc.id)}
-              className={`no-print p-1.5 rounded-lg border transition ${
-                isPinned
-                  ? 'text-amber-500 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40'
-                  : 'text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-500'
-              }`}
-              title={isPinned ? 'Unpin from favorites' : 'Pin to favorites'}
+            <h1
+              id="calc-heading"
+              className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance"
             >
-              <Star className="w-4 h-4" fill={isPinned ? 'currentColor' : 'none'} />
-            </button>
-            <div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span>{activeCalc.category}</span>
-                <span aria-hidden="true">·</span>
-                <span>Client-Side Local Computation</span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white leading-tight mt-0.5">
-                {activeCalc.name}
-              </h1>
-            </div>
+              {activeCalc.name}
+            </h1>
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">{activeCalc.desc}</p>
           </div>
 
-          {/* Action Buttons (NO EMBED BUTTON / NO CODE DISPLAY) */}
-          <div className="no-print flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
-              title="Print calculation result sheet"
+              type="button"
+              onClick={handleReset}
+              className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Result</span>
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
             </button>
-
-            <button
-              onClick={handleShare}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
-              title="Copy direct link to this calculation"
+            <a
+              href="/compare"
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('compare');
+                }
+              }}
+              className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0"
             >
-              {shared ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span>{shared ? 'Link Copied' : 'Share'}</span>
-            </button>
-
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>Compare What-If</span>
+            </a>
             <button
+              type="button"
               onClick={handleSave}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
-              title="Save snapshot to history"
+              className="h-10 px-4 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
             >
-              {saved ? <BookmarkCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Star className="w-3.5 h-3.5" />}
-              <span>{saved ? 'Saved' : 'Save'}</span>
-            </button>
-
-            <button
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
-              title="Export calculation to CSV spreadsheet"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>CSV</span>
+              {savedNotice ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+              <span>{savedNotice ? 'Saved to History' : 'Save Snapshot'}</span>
             </button>
           </div>
         </div>
 
-        {/* Inputs & Outputs Grid */}
-        <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 print-layout-grid">
-          
-          {/* Inputs Column */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Input Parameters
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono hidden print:inline-block">
-                All values local
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed no-print">
-              {activeCalc.desc}
-            </p>
-
-            <div className="space-y-4 pt-2">
+        {/* Inputs + Live Results Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Inputs Panel */}
+          <div className="lg:col-span-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 space-y-5">
+            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">Input Parameters</h2>
+            <div className="space-y-4">
               {activeCalc.inputs.map((inp) => {
-                const val = inputValues[inp.id] ?? inp.val;
-                return (
-                  <div key={inp.id} className="space-y-1.5 print-input-row">
-                    <div className="flex items-center justify-between text-xs">
-                      <label 
-                        htmlFor={`inp-${inp.id}`}
-                        className="font-semibold text-slate-700 dark:text-slate-300 print:text-slate-900"
+                const currentVal = values[inp.id] ?? inp.val;
+                if (inp.options && inp.options.length > 0) {
+                  return (
+                    <div key={inp.id} className="space-y-1.5">
+                      <label
+                        htmlFor={`input-${inp.id}`}
+                        className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                       >
                         {inp.label}
                       </label>
-                      {inp.help && (
-                        <span className="no-print text-[11px] text-slate-400">{inp.help}</span>
+                      <select
+                        id={`input-${inp.id}`}
+                        value={currentVal}
+                        onChange={(e) => handleInputChange(inp.id, Number(e.target.value))}
+                        className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        {inp.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={inp.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor={`input-${inp.id}`}
+                        className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      >
+                        {inp.label}
+                      </label>
+                      {inp.unit && (
+                        <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{inp.unit}</span>
                       )}
                     </div>
-                    <div className="relative">
-                      {/* Clean static text for print */}
-                      <div className="hidden print:block font-mono text-sm font-bold text-slate-950 py-0.5">
-                        {val} {inp.suffix ? inp.suffix : ''}
-                      </div>
-                      {/* Interactive input for screen */}
-                      <input
-                        id={`inp-${inp.id}`}
-                        type="number"
-                        value={val}
-                        step={inp.step ?? 'any'}
-                        min={inp.min}
-                        max={inp.max}
-                        onChange={(e) => handleInputChange(inp.id, parseFloat(e.target.value))}
-                        className="print:hidden w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl font-mono tabular-nums text-sm font-semibold text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
-                      />
-                    </div>
+                    <input
+                      id={`input-${inp.id}`}
+                      type="text"
+                      inputMode="decimal"
+                      value={draftValues[inp.id] ?? String(currentVal)}
+                      onChange={(e) => handleTextInputChange(inp.id, e.target.value)}
+                      className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono tabular-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      type="range"
+                      aria-label={`${inp.label} slider`}
+                      min={inp.min}
+                      max={inp.max}
+                      step={inp.step}
+                      value={Math.min(inp.max, Math.max(inp.min, currentVal))}
+                      onChange={(e) => handleInputChange(inp.id, Number(e.target.value))}
+                      className="w-full accent-indigo-600 cursor-pointer h-1.5"
+                    />
                   </div>
                 );
               })}
             </div>
+          </div>
 
-            {activeCalc.formulaExplanation && (
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                <span className="font-mono text-[11px] print:text-slate-700">Formula: {activeCalc.formulaExplanation}</span>
-                <button
-                  onClick={() => onAskAi(activeCalc, result.primary)}
-                  className="no-print flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Explain Formula</span>
-                </button>
+          {/* Outputs & Schedule Panel */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 space-y-6">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{result.primaryLabel}</p>
+                <p className="mt-1 font-mono tabular-nums text-3xl sm:text-4xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
+                  {result.primary}
+                </p>
+              </div>
+
+              {result.breakdown && breakdownTotal > 0 && (
+                <div className="space-y-2">
+                  <div className="h-2.5 w-full rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800">
+                    {result.breakdown.map((b) => (
+                      <div
+                        key={b.label}
+                        style={{
+                          width: `${(Math.max(0, b.value) / breakdownTotal) * 100}%`,
+                          backgroundColor: b.color,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
+                    {result.breakdown.map((b) => (
+                      <span key={b.label} className="inline-flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: b.color }} />
+                        <span>
+                          {b.label}: {((Math.max(0, b.value) / breakdownTotal) * 100).toFixed(1)}%
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {result.details.map((d) => (
+                  <div key={d.label} className="space-y-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{d.label}</p>
+                    <p className="font-mono tabular-nums text-sm font-semibold text-slate-900 dark:text-slate-100 break-all">
+                      {d.val}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {result.schedule && result.schedule.length > 0 && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
+                  <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">
+                    Amortization &amp; Growth Schedule
+                  </h2>
+                  {result.schedule.length > 8 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullSchedule((s) => !s)}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap"
+                    >
+                      {showFullSchedule ? 'Show Compact' : `Show All (${result.schedule.length})`}
+                    </button>
+                  )}
+                </div>
+                <div className="overflow-x-auto max-h-80">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+                      <tr>
+                        <th className="px-4 py-2.5 font-semibold">Period</th>
+                        {result.schedule[0].payment !== undefined && (
+                          <th className="px-4 py-2.5 font-semibold text-right">Payment</th>
+                        )}
+                        {result.schedule[0].principal !== undefined && (
+                          <th className="px-4 py-2.5 font-semibold text-right">Principal</th>
+                        )}
+                        {result.schedule[0].interest !== undefined && (
+                          <th className="px-4 py-2.5 font-semibold text-right">Interest</th>
+                        )}
+                        <th className="px-4 py-2.5 font-semibold text-right">Ending Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono tabular-nums">
+                      {(showFullSchedule ? result.schedule : result.schedule.slice(0, 8)).map((row) => (
+                        <tr key={row.period} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                          <td className="px-4 py-2 font-sans font-medium text-slate-700 dark:text-slate-300">
+                            {row.period}
+                          </td>
+                          {row.payment !== undefined && (
+                            <td className="px-4 py-2 text-right text-slate-700 dark:text-slate-300">{row.payment}</td>
+                          )}
+                          {row.principal !== undefined && (
+                            <td className="px-4 py-2 text-right text-slate-700 dark:text-slate-300">
+                              {row.principal}
+                            </td>
+                          )}
+                          {row.interest !== undefined && (
+                            <td className="px-4 py-2 text-right text-slate-600 dark:text-slate-400">{row.interest}</td>
+                          )}
+                          <td className="px-4 py-2 text-right font-semibold text-slate-900 dark:text-white">
+                            {row.balance}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
-
-          {/* Results Column */}
-          <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
-            <div className="p-6 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-4 print-result-box">
-              
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 print:text-slate-900">
-                  Calculated Result
-                </span>
-                <button
-                  onClick={handleCopyResult}
-                  className="no-print flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
-                  title="Copy computed result"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-
-              {/* Primary Output */}
-              <div 
-                className="text-3xl sm:text-4xl font-extrabold tracking-tight select-all tabular-nums leading-none print-primary-value"
-                style={{ color: 'var(--accent)' }}
-              >
-                {result.primary}
-              </div>
-
-              {/* Secondary Details */}
-              {result.details && result.details.length > 0 && (
-                <div className="pt-4 border-t border-slate-200/80 dark:border-slate-700 space-y-2">
-                  {result.details.map((d, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 print:text-slate-700">{d.label}</span>
-                      <span className="font-semibold text-slate-900 dark:text-white print:text-slate-950 tabular-nums font-mono">
-                        {d.val}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Chart Visualization (if available) */}
-              {result.chart && (
-                <div className="pt-4 border-t border-slate-200/80 dark:border-slate-700">
-                  <VisualChart chartData={result.chart} accentColor={accentColor} />
-                </div>
-              )}
-
-              {/* Schedule Accordion Toggle (if loan/mortgage) */}
-              {result.schedule && result.schedule.length > 0 && (
-                <div className="no-print pt-3 border-t border-slate-200/80 dark:border-slate-700">
-                  <button
-                    onClick={() => setShowSchedule(!showSchedule)}
-                    className="w-full flex items-center justify-between py-2 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Table className="w-3.5 h-3.5" />
-                      <span>{showSchedule ? 'Hide Amortization Schedule' : 'View Yearly Amortization Schedule'}</span>
-                    </span>
-                    <span className="text-xs">{showSchedule ? '▲' : '▼'}</span>
-                  </button>
-                </div>
-              )}
-
-            </div>
-          </div>
-
         </div>
-
-        {/* Amortization Schedule View */}
-        {showSchedule && result.schedule && (
-          <div className="p-6 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Annual Amortization Schedule
-                </h3>
-                <p className="text-xs text-slate-500">Principal and interest progression timeline</p>
-              </div>
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold hover:bg-slate-50 transition"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Schedule</span>
-              </button>
-            </div>
-            
-            <div className="overflow-x-auto max-h-72 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 print-table-wrapper">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 sticky top-0 font-semibold">
-                  <tr>
-                    <th className="p-3">Year</th>
-                    <th className="p-3">Principal Paid</th>
-                    <th className="p-3">Interest Paid</th>
-                    <th className="p-3">Remaining Balance</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {result.schedule.map((row) => (
-                    <tr key={row.year} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 font-mono tabular-nums">
-                      <td className="p-3 font-sans font-bold text-slate-900 dark:text-white">Year {row.year}</td>
-                      <td className="p-3 text-emerald-600 dark:text-emerald-400">{row.principalPaid}</td>
-                      <td className="p-3 text-rose-500">{row.interestPaid}</td>
-                      <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">{row.balanceRemaining}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Printable Document Footer */}
-        <div className="hidden print:block px-6 py-4 border-t border-slate-300 text-center text-[10px] text-slate-500 font-mono">
-          VeloCalc Pro · 100% Client-Side Local Computation · Zero Data Logged or Transmitted · Verified Mathematical Modeling
-        </div>
-
       </section>
 
-      {/* Directory & Explorer Section */}
-      <section id="directory-section" className="no-print space-y-6">
-        
-        {/* Filter & Search Header */}
+      {/* Unique Formula, Methodology & FAQs for the Active Calculator */}
+      <section
+        aria-labelledby="methodology-heading"
+        className="border-t border-slate-200 dark:border-slate-800 pt-10 grid grid-cols-1 lg:grid-cols-12 gap-8"
+      >
+        <div className="lg:col-span-7 space-y-6">
+          <div className="space-y-2">
+            <h2 id="methodology-heading" className="font-display text-xl font-bold text-slate-900 dark:text-white">
+              About the {activeCalc.name} Formula
+            </h2>
+            <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{activeCalc.methodology}</p>
+            <div className="mt-3 p-3.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-800 dark:text-slate-200 overflow-x-auto">
+              {activeCalc.formulaExplanation}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+              Frequently Asked Questions
+            </h3>
+            <div className="divide-y divide-slate-200 dark:divide-slate-800 border-y border-slate-200 dark:border-slate-800">
+              {activeCalc.faqs.map((faq) => (
+                <div key={faq.q} className="py-4 space-y-1">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{faq.q}</h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{faq.a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <aside className="lg:col-span-5 space-y-6">
+          {relatedArticle && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-2">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Deep Dive · {relatedArticle.readTime}
+              </p>
+              <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+                {relatedArticle.title}
+              </h3>
+              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">{relatedArticle.summary}</p>
+              <a
+                href="/knowledge"
+                onClick={(e) => {
+                  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                    e.preventDefault();
+                    onNavigate('knowledge');
+                  }
+                }}
+                className="inline-block pt-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Read formula guide →
+              </a>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+            <h3 className="font-display text-sm font-bold text-slate-900 dark:text-white">
+              Related {activeCalc.category} Tools
+            </h3>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {relatedCalcs.map((rc) => (
+                <li key={rc.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <a
+                    href={`/calc/${rc.id}`}
+                    onClick={(e) => {
+                      if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                        e.preventDefault();
+                        onSelectCalc(rc.id);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }}
+                    className="block group"
+                  >
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      {rc.name}
+                    </span>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">{rc.desc}</p>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+      </section>
+
+      {/* Complete 51-Calculator Directory with Real Crawlable <a href> Links */}
+      <section aria-labelledby="directory-heading" className="border-t border-slate-200 dark:border-slate-800 pt-10 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              Complete Calculator Directory
+            <h2 id="directory-heading" className="font-display text-xl font-bold text-slate-900 dark:text-white">
+              All 51 Precision Calculators
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Instant access to all 51 precision mathematical utilities
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Browse by domain or search formulas across finance, fitness, mathematics, and engineering.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            {/* Live Search */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Filter calculators..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-full sm:w-56"
-              />
-            </div>
+          <div className="relative w-full md:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search 51 calculators..."
+              aria-label="Search calculators"
+              className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
           </div>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-          {categories.map((cat) => {
-            const isSel = selectedCategory === cat;
+        {/* Category Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CATEGORIES.map((cat) => {
             const count = cat === 'All' ? calculators.length : calculators.filter((c) => c.category === cat).length;
+            const active = selectedCategory === cat;
             return (
               <button
                 key={cat}
+                type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
-                  isSel
-                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  active
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
-                <span>{cat}</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums font-mono">
-                  ({count})
-                </span>
+                {cat} ({count})
               </button>
             );
           })}
         </div>
 
-        {/* 51 Calculators Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCalculators.map((calc) => {
-            const isCur = calc.id === activeCalc.id;
-            return (
-              <div
-                key={calc.id}
-                onClick={() => {
-                  onSelectCalc(calc.id);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`p-5 rounded-2xl border cursor-pointer transition-all duration-200 flex flex-col justify-between group ${
-                  isCur
-                    ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-2xs hover:shadow-xs'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-                    <span>{calc.category}</span>
-                    {pinnedIds.includes(calc.id) && (
-                      <Star className="w-3.5 h-3.5 text-amber-500" fill="currentColor" />
-                    )}
-                  </div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {calc.name}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed">
-                    {calc.desc}
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                  <span>{isCur ? 'Currently Active' : 'Load Calculator'}</span>
-                  <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
+        {filteredDirectory.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-2">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">No calculators matched "{searchQuery}"</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('All');
+              }}
+              className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDirectory.map((calc) => {
+              const isCurrent = calc.id === activeCalc.id;
+              return (
+                <a
+                  key={calc.id}
+                  href={`/calc/${calc.id}`}
+                  onClick={(e) => {
+                    if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                      e.preventDefault();
+                      onSelectCalc(calc.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  }}
+                  className={`block rounded-xl border p-4 transition-colors ${
+                    isCurrent
+                      ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{calc.category}</div>
+                  <h3 className="mt-1 font-display text-sm font-bold text-slate-900 dark:text-white">{calc.name}</h3>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{calc.desc}</p>
+                </a>
+              );
+            })}
+          </div>
+        )}
       </section>
-
     </div>
   );
 };

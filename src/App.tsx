@@ -1,425 +1,318 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { PageId, ThemeKey, CurrencyKey, HistoryRecord, ChatMessage } from './types';
-import { calculators } from './data/calculators';
-import { Navigation } from './components/Navigation';
-import { CommandPalette } from './components/CommandPalette';
-import { CalculatorsPage } from './pages/CalculatorsPage';
-import { ComparePage } from './pages/ComparePage';
-import { KnowledgePage } from './pages/KnowledgePage';
-import { HistoryPage } from './pages/HistoryPage';
-import { AssistantPage } from './pages/AssistantPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { formatNumber } from './utils/format';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Navigation } from './components/Navigation.tsx';
+import { CalculatorsPage } from './pages/CalculatorsPage.tsx';
+import { ComparePage } from './pages/ComparePage.tsx';
+import { KnowledgePage } from './pages/KnowledgePage.tsx';
+import { HistoryPage } from './pages/HistoryPage.tsx';
+import { AssistantPage } from './pages/AssistantPage.tsx';
+import { PrivacyPage } from './pages/PrivacyPage.tsx';
+import { calculators } from './data/calculators.ts';
+import type { CalcCategory, CurrencyCode, HistoryRecord, PageId } from './types.ts';
 
-const themeColors: Record<ThemeKey, { accent: string; hover: string; light: string; border: string; glow: string }> = {
-  indigo: { accent: '#4f46e5', hover: '#4338ca', light: 'rgba(79, 70, 229, 0.12)', border: 'rgba(79, 70, 229, 0.35)', glow: 'rgba(79, 70, 229, 0.25)' },
-  emerald: { accent: '#10b981', hover: '#059669', light: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.35)', glow: 'rgba(16, 185, 129, 0.25)' },
-  cyan: { accent: '#06b6d4', hover: '#0891b2', light: 'rgba(6, 182, 212, 0.12)', border: 'rgba(6, 182, 212, 0.35)', glow: 'rgba(6, 182, 212, 0.25)' },
-  rose: { accent: '#f43f5e', hover: '#e11d48', light: 'rgba(244, 63, 94, 0.12)', border: 'rgba(244, 63, 94, 0.35)', glow: 'rgba(244, 63, 94, 0.25)' },
-  amber: { accent: '#f59e0b', hover: '#d97706', light: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.35)', glow: 'rgba(245, 158, 11, 0.25)' },
-  violet: { accent: '#8b5cf6', hover: '#7c3aed', light: 'rgba(139, 92, 246, 0.12)', border: 'rgba(139, 92, 246, 0.35)', glow: 'rgba(139, 92, 246, 0.25)' },
-};
+function parseLocation(): { page: PageId; calcId: string } {
+  if (typeof window === 'undefined') {
+    return { page: 'calculators', calcId: 'mortgage' };
+  }
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (path.startsWith('/calc/')) {
+    const id = path.slice('/calc/'.length).replace(/\.html$/, '');
+    const found = calculators.find((c) => c.id === id);
+    if (found) return { page: 'calculators', calcId: found.id };
+  }
+
+  const clean = path.replace(/\.html$/, '');
+  if (clean === '/compare') return { page: 'compare', calcId: 'mortgage' };
+  if (clean === '/knowledge') return { page: 'knowledge', calcId: 'mortgage' };
+  if (clean === '/history') return { page: 'history', calcId: 'mortgage' };
+  if (clean === '/assistant') return { page: 'assistant', calcId: 'mortgage' };
+  if (clean === '/privacy') return { page: 'privacy', calcId: 'mortgage' };
+
+  return { page: 'calculators', calcId: 'mortgage' };
+}
 
 export default function App() {
-  const [activePage, setActivePage] = useState<PageId>('calculators');
-  const [activeCalcId, setActiveCalcId] = useState<string>('mortgage');
-  const [activeTheme, setActiveTheme] = useState<ThemeKey>(() => {
-    return (localStorage.getItem('velocalc_theme_color') as ThemeKey) || 'indigo';
-  });
-  const [activeCurrency, setActiveCurrency] = useState<CurrencyKey>(() => {
-    return (localStorage.getItem('velocalc_currency') as CurrencyKey) || 'USD';
-  });
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    const saved = localStorage.getItem('velocalc_theme_mode');
-    if (saved) return saved === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const initial = parseLocation();
+  const [activePage, setActivePage] = useState<PageId>(initial.page);
+  const [activeCalcId, setActiveCalcId] = useState<string>(initial.calcId);
+  const [restoredInputs, setRestoredInputs] = useState<Record<string, number> | null>(null);
 
-  // Pinned favorites
-  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('velocalc_pinned');
-      return saved ? JSON.parse(saved) : ['mortgage', 'loan', 'compound', 'bmi'];
-    } catch {
-      return ['mortgage', 'loan', 'compound', 'bmi'];
+  const [currency, setCurrency] = useState<CurrencyCode>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('velocalc_currency') as CurrencyCode | null;
+      if (saved) return saved;
     }
+    return 'USD';
   });
 
-  // History records
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('velocalc_theme') === 'dark';
+    }
+    return false;
+  });
+
   const [history, setHistory] = useState<HistoryRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('velocalc_history');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('velocalc_history');
+        if (raw) return JSON.parse(raw) as HistoryRecord[];
+      } catch {
+        return [];
+      }
     }
+    return [];
   });
 
-  // Chat log for AI Assistant
-  const [chatLog, setChatLog] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      text: "Hello! I'm your Velo AI Guide. I can explain any mathematical formula, evaluate custom equations, and help you model financial or scientific scenarios. How can I help you today?",
-      timestamp: Date.now(),
-    },
-  ]);
-
-  // Apply dark class
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('velocalc_theme_mode', 'dark');
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+      window.localStorage.setItem('velocalc_theme', 'dark');
     } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('velocalc_theme_mode', 'light');
+      root.classList.remove('dark');
+      window.localStorage.setItem('velocalc_theme', 'light');
     }
-  }, [isDark]);
+  }, [darkMode]);
 
-  // Apply CSS color variables
   useEffect(() => {
-    const t = themeColors[activeTheme] || themeColors.indigo;
-    const r = document.documentElement;
-    r.style.setProperty('--accent', t.accent);
-    r.style.setProperty('--accent-hover', t.hover);
-    r.style.setProperty('--accent-light', t.light);
-    r.style.setProperty('--accent-border', t.border);
-    r.style.setProperty('--accent-glow', t.glow);
-    localStorage.setItem('velocalc_theme_color', activeTheme);
-  }, [activeTheme]);
+    window.localStorage.setItem('velocalc_currency', currency);
+  }, [currency]);
 
-  // Clean pathname, query param & hash route listener (supports /calc/:id, /:page, ?calc=, #calc=)
   useEffect(() => {
-    const validPages: PageId[] = ['calculators', 'compare', 'knowledge', 'history', 'assistant', 'privacy'];
+    try {
+      window.localStorage.setItem('velocalc_history', JSON.stringify(history));
+    } catch {
+      // Ignore storage quota issues
+    }
+  }, [history]);
 
-    const syncRouteFromUrl = () => {
-      const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
-
-      if (pathname.startsWith('/calc/')) {
-        const calcId = pathname.replace('/calc/', '');
-        if (calculators.some((c) => c.id === calcId)) {
-          setActiveCalcId(calcId);
-          setActivePage('calculators');
-          return;
-        }
-      }
-
-      const pathPage = pathname.replace(/^\//, '') as PageId;
-      if (validPages.includes(pathPage)) {
-        setActivePage(pathPage);
-        return;
-      }
-
-      const searchParams = new URLSearchParams(window.location.search);
-      const queryPage = searchParams.get('page') as PageId | null;
-      const queryCalc = searchParams.get('calc');
-
-      if (queryCalc && calculators.some((c) => c.id === queryCalc)) {
-        setActiveCalcId(queryCalc);
-        setActivePage('calculators');
-        return;
-      }
-
-      if (queryPage && validPages.includes(queryPage)) {
-        setActivePage(queryPage);
-        return;
-      }
-
-      const hash = window.location.hash.replace(/^#/, '');
-      if (!hash) return;
-
-      if (hash.startsWith('page=')) {
-        const page = hash.replace('page=', '') as PageId;
-        if (validPages.includes(page)) {
-          setActivePage(page);
-        }
-      } else if (hash.startsWith('calc=')) {
-        const [calcPart] = hash.split('?');
-        const calcId = calcPart.replace('calc=', '');
-        if (calculators.some((c) => c.id === calcId)) {
-          setActiveCalcId(calcId);
-          setActivePage('calculators');
-        }
-      } else if (hash === 'privacy' || hash === 'terms') {
-        setActivePage('privacy');
-      }
+  useEffect(() => {
+    const onPopState = () => {
+      const parsed = parseLocation();
+      setActivePage(parsed.page);
+      setActiveCalcId(parsed.calcId);
     };
-
-    window.addEventListener('hashchange', syncRouteFromUrl);
-    window.addEventListener('popstate', syncRouteFromUrl);
-    syncRouteFromUrl();
-    return () => {
-      window.removeEventListener('hashchange', syncRouteFromUrl);
-      window.removeEventListener('popstate', syncRouteFromUrl);
-    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Keep page title updated for SEO and browser tabs
+  // Sync <title>, <link rel="canonical">, <meta name="description">, and <meta name="robots">
   useEffect(() => {
+    const origin = window.location.origin;
     const active = calculators.find((c) => c.id === activeCalcId);
-    if (activePage === 'calculators' && active) {
-      document.title = `${active.name} - VeloCalc Pro`;
-    } else {
-      const titles: Record<PageId, string> = {
-        calculators: 'VeloCalc Pro - 51 Precision Calculators',
-        compare: 'Compare Studio - VeloCalc Pro',
-        knowledge: 'Formulas & Guides - VeloCalc Pro',
-        history: 'Calculation History - VeloCalc Pro',
-        assistant: 'AI Math Assistant - VeloCalc Pro',
-        privacy: 'Privacy & Methodology - VeloCalc Pro',
-      };
-      document.title = titles[activePage];
+
+    let title = 'VeloCalc Pro - 51 Precision Calculators';
+    let description =
+      'Clean, distraction-free suite of 51 precision calculators for finance, fitness, math, and engineering with live schedules, what-if comparison, and zero tracking.';
+    let canonicalPath = '/';
+    let robots = 'index, follow';
+
+    if (activePage === 'calculators') {
+      if (window.location.pathname.startsWith('/calc/') && active) {
+        title = `${active.name} — Free Online ${active.category} Calculator | VeloCalc Pro`;
+        description = `${active.desc} Formula: ${active.formulaExplanation}.`;
+        canonicalPath = `/calc/${active.id}`;
+      } else {
+        canonicalPath = '/';
+      }
+    } else if (activePage === 'compare') {
+      title = 'Side-by-Side What-If Calculator Comparison | VeloCalc Pro';
+      description = 'Compare two financial, mortgage, loan, investment, or fitness scenarios side-by-side.';
+      canonicalPath = '/compare';
+    } else if (activePage === 'knowledge') {
+      title = 'Formulas, Algorithms & Mathematical Guides | VeloCalc Pro';
+      description =
+        'Learn the exact equations behind mortgage amortization, the Rule of 72, Mifflin-St Jeor TDEE, CIDR subnetting, and 1RM strength modeling.';
+      canonicalPath = '/knowledge';
+    } else if (activePage === 'privacy') {
+      title = 'Privacy Policy & Scientific Methodology | VeloCalc Pro';
+      description =
+        'Learn how VeloCalc Pro executes 100% client-side calculations with zero tracking and standardized mathematical formulas.';
+      canonicalPath = '/privacy';
+    } else if (activePage === 'history') {
+      title = 'Calculation History | VeloCalc Pro';
+      canonicalPath = '/history';
+      robots = 'noindex, follow';
+    } else if (activePage === 'assistant') {
+      title = 'Velo Math & Formula Assistant | VeloCalc Pro';
+      canonicalPath = '/assistant';
+      robots = 'noindex, follow';
     }
+
+    document.title = title;
+
+    const canonicalEl = document.querySelector('link[rel="canonical"]');
+    if (canonicalEl) {
+      canonicalEl.setAttribute('href', `${origin}${canonicalPath}`);
+    }
+
+    const descEl = document.querySelector('meta[name="description"]');
+    if (descEl) {
+      descEl.setAttribute('content', description);
+    }
+
+    let robotsEl = document.querySelector('meta[name="robots"]');
+    if (!robotsEl) {
+      robotsEl = document.createElement('meta');
+      robotsEl.setAttribute('name', 'robots');
+      document.head.appendChild(robotsEl);
+    }
+    robotsEl.setAttribute('content', robots);
   }, [activePage, activeCalcId]);
 
-  const handleNavigate = (page: PageId) => {
+  const handleNavigate = useCallback((page: PageId) => {
     setActivePage(page);
-    const targetPath = page === 'calculators' ? '/' : `/${page}`;
-    window.history.pushState({}, '', targetPath);
+    const nextPath = page === 'calculators' ? '/' : `/${page}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectCalc = (calcId: string) => {
-    setActiveCalcId(calcId);
-    setActivePage('calculators');
-    window.history.pushState({}, '', `/calc/${calcId}`);
-  };
-
-  const handleTogglePin = (id: string) => {
-    setPinnedIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id];
-      try {
-        localStorage.setItem('velocalc_pinned', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const handleSaveHistory = (record: HistoryRecord) => {
-    setHistory((prev) => {
-      const next = [record, ...prev.slice(0, 49)];
-      try {
-        localStorage.setItem('velocalc_history', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const handleClearHistory = () => {
-    setHistory([]);
-    try {
-      localStorage.removeItem('velocalc_history');
-    } catch {}
-  };
-
-  const handleRemoveHistoryItem = (id: string) => {
-    setHistory((prev) => {
-      const next = prev.filter((r) => r.id !== id);
-      try {
-        localStorage.setItem('velocalc_history', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const handleLoadRecord = (record: HistoryRecord) => {
-    setActiveCalcId(record.calcId);
-    setActivePage('calculators');
-    window.location.hash = `calc=${record.calcId}`;
-  };
-
-  // AI Assistant message handler
-  const handleSendMessage = useCallback((text: string) => {
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text,
-      timestamp: Date.now(),
-    };
-    setChatLog((prev) => [...prev, userMsg]);
-
-    const q = text.toLowerCase();
-    setTimeout(() => {
-      let reply = '';
-      let suggestedToolId: string | undefined;
-
-      // 1. Math solver expression
-      const mathMatch = text.match(/(?:calc|calculate|solve|math|eval)?\s*[:=]?\s*([0-9\.\+\-\*\/\^\(\)\s]+)/i);
-      if (mathMatch && mathMatch[1].trim().length > 2 && /[\+\-\*\/\^]/.test(mathMatch[1])) {
-        try {
-          const expr = mathMatch[1].replace(/\^/g, '**');
-          if (/^[0-9\.\+\-\*\/\(\)\s\*\*]+$/.test(expr)) {
-            const sol = Function(`'use strict'; return (${expr})`)();
-            if (!isNaN(sol) && isFinite(sol)) {
-              reply = `Calculated: ${mathMatch[1].trim()} = ${formatNumber(sol, 4)}`;
-            }
-          }
-        } catch {}
-      }
-
-      // 2. Domain answers
-      if (!reply) {
-        if (q.includes('mortgage') || q.includes('amortization') || q.includes('home loan')) {
-          suggestedToolId = 'mortgage';
-          reply = `Mortgage payments are calculated using fixed compound annuities: M = P[i(1+i)^n]/[(1+i)^n - 1].\n\nIn early years, interest dominates because it is charged on the large remaining principal. Extra principal payments reduce subsequent monthly interest compounding forever, shaving years off the repayment term.`;
-        } else if (q.includes('rule of 72') || q.includes('doubling') || q.includes('compound')) {
-          suggestedToolId = 'compound';
-          reply = `The Rule of 72 is an algebraic approximation of compound doubling time:\n\nDoubling Years ≈ 72 / Annual Return Rate\n\nFor example, at an 8% expected return, capital doubles in approximately 9 years (72 / 8 = 9). At 12%, capital doubles in 6 years.`;
-        } else if (q.includes('calorie') || q.includes('bmr') || q.includes('tdee') || q.includes('fat loss')) {
-          suggestedToolId = 'calorie';
-          reply = `Basal Metabolic Rate (BMR) measures energy required for cellular respiration at rest (via Mifflin-St Jeor). Total Daily Energy Expenditure (TDEE) multiplies BMR by activity factor.\n\nFor sustainable fat loss without metabolic slowdown, aim for a measured 15% to 20% deficit under TDEE.`;
-        } else if (q.includes('subnet') || q.includes('cidr') || q.includes('mask') || q.includes('ipv4')) {
-          suggestedToolId = 'subnet';
-          reply = `In IPv4 CIDR notation (/xx), the prefix defines how many leading bits identify the network block. The remaining bits allocate host capacity:\n\nUsable Hosts = 2^(32 - Prefix) - 2\n\nFor example, a /24 network provides 256 addresses minus 2 reserves (network and broadcast), yielding 254 usable host addresses.`;
-        } else if (q.includes('1rm') || q.includes('one rep max') || q.includes('strength')) {
-          suggestedToolId = 'onerepmax';
-          reply = `The One Rep Max estimator blends the Epley formula (W * [1 + r/30]) and Brzycki formula (W * [36 / (37 - r)]) to benchmark maximal strength from sets of 2 to 10 repetitions without maximal injury risk.`;
-        } else {
-          reply = `I can help you analyze any of our 51 precision calculators, evaluate equations, or compare what-if scenarios. Try selecting a calculator from the navigation or ask about specific financial or fitness equations!`;
-        }
-      }
-
-      setChatLog((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'assistant',
-          text: reply,
-          timestamp: Date.now(),
-          suggestedToolId,
-        },
-      ]);
-    }, 200);
   }, []);
 
-  const handleAskAiFromCalc = (calc: (typeof calculators)[0], primaryRes: string) => {
-    setActivePage('assistant');
-    handleSendMessage(`How does the formula for ${calc.name} work, and what does ${primaryRes} represent?`);
-  };
+  const handleSelectCalc = useCallback((calcId: string) => {
+    setActiveCalcId(calcId);
+    setActivePage('calculators');
+    const nextPath = `/calc/${calcId}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  }, []);
 
-  const activeCalc = calculators.find((c) => c.id === activeCalcId) || calculators[0];
+  const handleSaveSnapshot = useCallback(
+    (
+      calcId: string,
+      calcName: string,
+      category: CalcCategory,
+      primaryResult: string,
+      primaryLabel: string,
+      inputSnapshot: Record<string, number>
+    ) => {
+      const record: HistoryRecord = {
+        id: `${calcId}-${Date.now()}`,
+        calcId,
+        calcName,
+        category,
+        timestamp: Date.now(),
+        primaryResult,
+        primaryLabel,
+        inputSnapshot,
+        currency,
+      };
+      setHistory((prev) => [record, ...prev].slice(0, 50));
+    },
+    [currency]
+  );
+
+  const handleLoadRecord = useCallback((record: HistoryRecord) => {
+    setCurrency(record.currency);
+    setRestoredInputs(record.inputSnapshot);
+    setActiveCalcId(record.calcId);
+    setActivePage('calculators');
+    const nextPath = `/calc/${record.calcId}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleClearRestored = useCallback(() => {
+    setRestoredInputs(null);
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      
-      {/* Persistent Navigation Menu */}
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <Navigation
         activePage={activePage}
         onNavigate={handleNavigate}
-        activeTheme={activeTheme}
-        onThemeChange={(t) => setActiveTheme(t)}
-        isDark={isDark}
-        onToggleDark={() => setIsDark(!isDark)}
-        activeCurrency={activeCurrency}
-        onCurrencyChange={(curr) => setActiveCurrency(curr)}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        currency={currency}
+        onCurrencyChange={setCurrency}
+        darkMode={darkMode}
+        onToggleDark={() => setDarkMode((d) => !d)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1">
         {activePage === 'calculators' && (
           <CalculatorsPage
-            calculators={calculators}
             activeCalcId={activeCalcId}
             onSelectCalc={handleSelectCalc}
-            currency={activeCurrency}
-            pinnedIds={pinnedIds}
-            onTogglePin={handleTogglePin}
-            onSaveHistory={handleSaveHistory}
-            onAskAi={handleAskAiFromCalc}
-            accentColor={themeColors[activeTheme]?.accent || '#4f46e5'}
+            onNavigate={handleNavigate}
+            currency={currency}
+            restoredInputs={restoredInputs}
+            onClearRestoredInputs={handleClearRestored}
+            onSaveSnapshot={handleSaveSnapshot}
           />
         )}
-
-        {activePage === 'compare' && (
-          <ComparePage
-            calculators={calculators}
-            initialCalcId={activeCalcId}
-            currency={activeCurrency}
-            onOpenCalc={handleSelectCalc}
-          />
-        )}
-
-        {activePage === 'knowledge' && (
-          <KnowledgePage onOpenCalc={handleSelectCalc} />
-        )}
-
+        {activePage === 'compare' && <ComparePage currency={currency} initialCalcId={activeCalcId} />}
+        {activePage === 'knowledge' && <KnowledgePage onSelectCalc={handleSelectCalc} />}
         {activePage === 'history' && (
           <HistoryPage
-            history={history}
-            onClearHistory={handleClearHistory}
-            onRemoveHistoryItem={handleRemoveHistoryItem}
+            records={history}
             onLoadRecord={handleLoadRecord}
-            pinnedIds={pinnedIds}
-            calculators={calculators}
-            onTogglePin={handleTogglePin}
-            onOpenCalc={handleSelectCalc}
+            onDeleteRecord={(id) => setHistory((prev) => prev.filter((r) => r.id !== id))}
+            onClearAll={() => setHistory([])}
+            onNavigate={handleNavigate}
           />
         )}
-
-        {activePage === 'assistant' && (
-          <AssistantPage
-            chatLog={chatLog}
-            onSendMessage={handleSendMessage}
-            onClearChat={() => setChatLog([])}
-            activeCalc={activeCalc}
-            onOpenCalc={handleSelectCalc}
-          />
-        )}
-
-        {activePage === 'privacy' && <PrivacyPage />}
+        {activePage === 'assistant' && <AssistantPage onSelectCalc={handleSelectCalc} />}
+        {activePage === 'privacy' && <PrivacyPage onNavigate={handleNavigate} />}
       </main>
 
-      {/* Global Command Palette (⌘K) */}
-      <CommandPalette
-        isOpen={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-        calculators={calculators}
-        onSelectCalculator={handleSelectCalc}
-      />
-
-      {/* Distraction-Free Compliance Footer (No Ads, No Embed Code, Clean Typography) */}
-      <footer className="border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 py-8 text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div 
-              className="w-5 h-5 rounded-md text-white flex items-center justify-center font-bold text-[10px]"
-              style={{ backgroundColor: 'var(--accent)' }}
+      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 py-8 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
+          <p>© {new Date().getFullYear()} VeloCalc Pro · 51 Precision Calculators</p>
+          <div className="flex flex-wrap items-center gap-5">
+            <a
+              href="/"
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  handleNavigate('calculators');
+                }
+              }}
+              className="hover:text-slate-900 dark:hover:text-white transition-colors"
             >
-              ⚡
-            </div>
-            <span className="font-bold text-slate-900 dark:text-white">VeloCalc Pro</span>
-            <span>· 51 Precision Calculation Engines</span>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-medium">
-            <button onClick={() => handleNavigate('calculators')} className="hover:text-slate-900 dark:hover:text-white transition">
               Calculators
-            </button>
-            <button onClick={() => handleNavigate('compare')} className="hover:text-slate-900 dark:hover:text-white transition">
-              Compare Studio
-            </button>
-            <button onClick={() => handleNavigate('knowledge')} className="hover:text-slate-900 dark:hover:text-white transition">
-              Formulas &amp; Guides
-            </button>
-            <button onClick={() => handleNavigate('history')} className="hover:text-slate-900 dark:hover:text-white transition">
-              Audit History
-            </button>
-            <button onClick={() => handleNavigate('assistant')} className="hover:text-slate-900 dark:hover:text-white transition">
-              AI Assistant
-            </button>
-            <button onClick={() => handleNavigate('privacy')} className="hover:text-slate-900 dark:hover:text-white transition">
-              Privacy &amp; Terms
-            </button>
+            </a>
+            <a
+              href="/compare"
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  handleNavigate('compare');
+                }
+              }}
+              className="hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Compare
+            </a>
+            <a
+              href="/knowledge"
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  handleNavigate('knowledge');
+                }
+              }}
+              className="hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Knowledge
+            </a>
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                  e.preventDefault();
+                  handleNavigate('privacy');
+                }
+              }}
+              className="hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Privacy &amp; Methodology
+            </a>
           </div>
-
-          <p className="text-[11px] text-slate-400">
-            100% Client-Side Computation · Zero Server Tracking
-          </p>
         </div>
       </footer>
-
     </div>
   );
 }
