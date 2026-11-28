@@ -48,7 +48,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           onClick={(e) => handleLinkClick(e, 'calculators')}
           className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0"
         >
-          VeloCalc Pro
+          VeloCalc
         </a>
 
         {/* Zone 2: Clean Single-Line Navigation Links */}

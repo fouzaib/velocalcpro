@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Bookmark, Check, RotateCcw, Search, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { calculators } from '../data/calculators.ts';
 import { articles } from '../data/articles.ts';
+import { buildCalcGuide } from '../utils/calcGuide.ts';
 import type { CalcCategory, CurrencyCode, PageId } from '../types.ts';
 
 interface CalculatorsPageProps {
   activeCalcId: string;
+  isHomeRoute?: boolean;
   onSelectCalc: (calcId: string) => void;
+  onSelectArticle?: (slug: string) => void;
   onNavigate: (page: PageId) => void;
   currency: CurrencyCode;
   restoredInputs?: Record<string, number> | null;
@@ -25,7 +28,9 @@ const CATEGORIES: ('All' | CalcCategory)[] = ['All', 'Finance', 'Fitness', 'Math
 
 export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
   activeCalcId,
+  isHomeRoute = false,
   onSelectCalc,
+  onSelectArticle,
   onNavigate,
   currency,
   restoredInputs,
@@ -93,6 +98,8 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
   }, [activeCalc, restoredInputs, onClearRestoredInputs]);
 
   const result = useMemo(() => activeCalc.calc(values, currency), [activeCalc, values, currency]);
+
+  const guide = useMemo(() => buildCalcGuide(activeCalc, result), [activeCalc, result]);
 
   const relatedCalcs = useMemo(
     () => calculators.filter((c) => c.category === activeCalc.category && c.id !== activeCalc.id).slice(0, 6),
@@ -183,6 +190,21 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-10">
+      {isHomeRoute && (
+        <section className="space-y-2 border-b border-slate-200 dark:border-slate-800 pb-6">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Finance · Fitness · Mathematics · Engineering
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance">
+            VeloCalc — 51 Precision Calculators
+          </h1>
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-3xl">
+            Distraction-free, 100% client-side calculators with live amortization schedules, scenario comparison, and
+            zero tracking. Select any tool below to get started.
+          </p>
+        </section>
+      )}
+
       {/* Top Calculator Selection Bar */}
       <section
         aria-label="Calculator selection bar"
@@ -317,12 +339,21 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
               <span aria-hidden="true">·</span>
               <code className="font-mono text-slate-700 dark:text-slate-300">{activeCalc.formulaExplanation}</code>
             </div>
-            <h1
-              id="calc-heading"
-              className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance"
-            >
-              {activeCalc.name}
-            </h1>
+            {isHomeRoute ? (
+              <h2
+                id="calc-heading"
+                className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance"
+              >
+                {activeCalc.name}
+              </h2>
+            ) : (
+              <h1
+                id="calc-heading"
+                className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance"
+              >
+                {activeCalc.name}
+              </h1>
+            )}
             <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">{activeCalc.desc}</p>
           </div>
 
@@ -541,20 +572,59 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
         </div>
       </section>
 
-      {/* Unique Formula, Methodology & FAQs for the Active Calculator */}
+      {/* Unique Formula, Worked Example, Parameters & FAQs for the Active Calculator */}
       <section
         aria-labelledby="methodology-heading"
         className="border-t border-slate-200 dark:border-slate-800 pt-10 grid grid-cols-1 lg:grid-cols-12 gap-8"
       >
-        <div className="lg:col-span-7 space-y-6">
-          <div className="space-y-2">
+        <div className="lg:col-span-7 space-y-8">
+          <div className="space-y-3">
             <h2 id="methodology-heading" className="font-display text-xl font-bold text-slate-900 dark:text-white">
               About the {activeCalc.name} Formula
             </h2>
             <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{activeCalc.methodology}</p>
-            <div className="mt-3 p-3.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-800 dark:text-slate-200 overflow-x-auto">
+            <div className="p-3.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-800 dark:text-slate-200 overflow-x-auto">
               {activeCalc.formulaExplanation}
             </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+              Worked Example &amp; Calculation Walkthrough
+            </h3>
+            {guide.walkthroughParagraphs.map((para, idx) => (
+              <p key={idx} className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                {para}
+              </p>
+            ))}
+          </div>
+
+          <div className="space-y-2.5">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+              Input Variable Reference
+            </h3>
+            <div className="divide-y divide-slate-200 dark:divide-slate-800 border-y border-slate-200 dark:border-slate-800">
+              {guide.parameterNotes.map((param) => (
+                <div key={param.label} className="py-3 space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold text-slate-900 dark:text-white">{param.label}</span>
+                    <span className="font-mono text-slate-500 dark:text-slate-400">Default: {param.defaultVal}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">{param.guidance}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+              Common Applications
+            </h3>
+            <ul className="list-disc pl-5 space-y-1.5 text-sm text-slate-600 dark:text-slate-400">
+              {guide.practicalUseCases.map((uc) => (
+                <li key={uc}>{uc}</li>
+              ))}
+            </ul>
           </div>
 
           <div className="space-y-4">
@@ -562,7 +632,7 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
               Frequently Asked Questions
             </h3>
             <div className="divide-y divide-slate-200 dark:divide-slate-800 border-y border-slate-200 dark:border-slate-800">
-              {activeCalc.faqs.map((faq) => (
+              {[...activeCalc.faqs, ...guide.extraFaqs].map((faq) => (
                 <div key={faq.q} className="py-4 space-y-1">
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{faq.q}</h4>
                   <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{faq.a}</p>
@@ -583,11 +653,15 @@ export const CalculatorsPage: React.FC<CalculatorsPageProps> = ({
               </h3>
               <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">{relatedArticle.summary}</p>
               <a
-                href="/knowledge"
+                href={`/knowledge/${relatedArticle.id}`}
                 onClick={(e) => {
                   if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
                     e.preventDefault();
-                    onNavigate('knowledge');
+                    if (onSelectArticle) {
+                      onSelectArticle(relatedArticle.id);
+                    } else {
+                      onNavigate('knowledge');
+                    }
                   }
                 }}
                 className="inline-block pt-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"

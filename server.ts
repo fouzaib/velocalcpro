@@ -88,13 +88,22 @@ ${calcCatalog}`,
   });
 
   // Dynamic sitemap.xml for Node server mode
-  app.get('/sitemap.xml', (_req, res) => {
+  app.get('/sitemap.xml', async (_req, res) => {
+    const { articles } = await import('./src/data/articles.ts');
     const today = new Date().toISOString().split('T')[0];
     const urls = [
       { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
       { loc: `${SITE_URL}/compare`, priority: '0.9', changefreq: 'weekly' },
-      { loc: `${SITE_URL}/knowledge`, priority: '0.8', changefreq: 'weekly' },
+      { loc: `${SITE_URL}/knowledge`, priority: '0.9', changefreq: 'weekly' },
+      { loc: `${SITE_URL}/about`, priority: '0.6', changefreq: 'monthly' },
+      { loc: `${SITE_URL}/contact`, priority: '0.5', changefreq: 'monthly' },
       { loc: `${SITE_URL}/privacy`, priority: '0.5', changefreq: 'monthly' },
+      { loc: `${SITE_URL}/terms`, priority: '0.5', changefreq: 'monthly' },
+      ...articles.map((a) => ({
+        loc: `${SITE_URL}/knowledge/${a.id}`,
+        priority: '0.8',
+        changefreq: 'monthly',
+      })),
       ...calculators.map((c) => ({
         loc: `${SITE_URL}/calc/${c.id}`,
         priority: '0.8',

@@ -2,7 +2,16 @@ export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'INR' | 'CAD' | 'AUD' | 'JPY'
 
 export type CalcCategory = 'Finance' | 'Fitness' | 'Math' | 'Engineering';
 
-export type PageId = 'calculators' | 'compare' | 'knowledge' | 'history' | 'assistant' | 'privacy';
+export type PageId =
+  | 'calculators'
+  | 'compare'
+  | 'knowledge'
+  | 'history'
+  | 'assistant'
+  | 'privacy'
+  | 'about'
+  | 'contact'
+  | 'terms';
 
 export interface CalcInputOption {
   label: string;
